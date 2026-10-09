@@ -35,6 +35,7 @@ BASE_COLUMNS = [
 TAIL_COLUMNS = [
     "n_models",
     "aggregation",
+    "aggregation_space",
     "cnn_smiles_truncated",
     "is_control",
     "target",
@@ -192,6 +193,7 @@ def run_screen(cfg: ScreenConfig, verbose: bool = True) -> dict:
                 library,
                 ensemble,
                 aggregation=cfg.aggregation,
+                aggregation_space=cfg.aggregation_space,
                 work_dir=cfg.work_dir,
                 quiet=cfg.quiet_deeppurpose,
                 verbose=verbose,

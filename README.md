@@ -20,7 +20,17 @@ ADORA2A            0.708        0.750      -0.042     AUC explained by molecular
 CB1                1.000        0.958      +0.042     AUC explained by molecular weight
 
 cross-target Spearman rho (same 72 molecules, different proteins):  0.910 - 0.954
+
+exact permutation p:  MAOA 0.089   ADORA2A 0.176   CB1 0.005
+AUC resolution:       one swapped pair = 0.042 (4x6) or 0.033 (5x6)
+Bonferroni (3 targets): alpha = 0.0167 -> only CB1 survives, in either aggregation space
 ```
+
+No target shows target-specific recognition that survives multiple-comparison
+correction. The one result that does survive is CB1's, and that is the one explained by
+molecular weight. Re-running under DeepPurpose's other aggregation branch
+(`analyze --space nm`) promotes two targets above the uncorrected 0.05 line — see §5
+for why that does not change the conclusion, and why it nearly did.
 
 CB1's apparently perfect AUC is almost entirely reproducible by ranking on molecular
 weight alone, and the three targets produce very nearly the **same** ranking despite
@@ -57,7 +67,7 @@ Install order matters, and the one-liner you'd expect does not work. See
 [Known friction](#known-friction) for why.
 
 ```bash
-git clone https://github.com/anindya2710/dietary-dti-screen.git
+git clone https://github.com/YOUR-USERNAME/dietary-dti-screen.git
 cd dietary-dti-screen
 python -m venv .venv && source .venv/bin/activate
 make setup          # or follow the three steps below
@@ -194,34 +204,152 @@ why §3 is the diagnostic that matters rather than this one.
 
 ### 3. Against an MW-only baseline, two of three AUCs vanish
 
-| Target | Model AUC | MW-only AUC | Delta |
+Reported under **both** aggregation spaces, because the answer depends on which one
+you pick (§5). MW-only AUC is identical in both: 0.533 / 0.750 / 0.958.
+
+**`pkd` space** (this repo's default, DeepPurpose `convert_y=False`):
+
+| Target | Model AUC | 95% CI | exact *p* | Delta | Delta in pairs |
+|---|---|---|---|---|---|
+| MAOA | 0.767 | [0.40, 1.00] | 0.089 | +0.233 | +7.0 |
+| ADORA2A | 0.708 | [0.29, 1.00] | 0.176 | −0.042 | −1.0 |
+| CB1 | 1.000 | [1.00, 1.00] | **0.005** | +0.042 | +1.0 |
+
+**`nm` space** (DeepPurpose `convert_y=True`, which is `oneliner`'s default):
+
+| Target | Model AUC | 95% CI | exact *p* | Delta | Delta in pairs |
+|---|---|---|---|---|---|
+| MAOA | 0.867 | [0.60, 1.00] | **0.026** | +0.333 | +10.0 |
+| ADORA2A | 0.875 | [0.63, 1.00] | **0.033** | +0.125 | +3.0 |
+| CB1 | 1.000 | [1.00, 1.00] | **0.005** | +0.042 | +1.0 |
+
+At face value these disagree: in `pkd` space no target beats the baseline significantly,
+while in `nm` space two do. **Multiple-comparison correction resolves it.** Three targets
+are tested, so the Bonferroni threshold is 0.05/3 = 0.0167:
+
+| Target | *p* (pkd) | *p* (nm) | Survives α = 0.0167? |
 |---|---|---|---|
-| MAOA | 0.767 | 0.533 | **+0.233** |
-| ADORA2A | 0.708 | 0.750 | **−0.042** |
-| CB1 | 1.000 | 0.958 | **+0.042** |
+| MAOA | 0.089 | 0.026 | No, in either space |
+| ADORA2A | 0.176 | 0.033 | No, in either space |
+| CB1 | 0.005 | 0.005 | **Yes, in both** |
+
+Counting all six tests as exploratory (α = 0.0083) gives the same answer. So the
+conclusion *is* stable — but only once the multiplicity is accounted for, and the
+uncorrected `nm` result would have told a reviewer something different.
+
+**Read the last column first.** With 4–5 actives and 6 decoys there are only 24–30
+pairwise comparisons, so AUC is quantised to steps of 1/24 = 0.042 or 1/30 = 0.033.
+A "delta" smaller than that step is one swapped pair, not a measurement. CB1's +0.042
+is exactly one pair.
+
+The *p*-values are exact, by complete enumeration of all C(10,4) = 210 or C(11,5) = 462
+labellings — no distributional assumption, which matters at this sample size. The
+confidence intervals are percentile bootstrap and are correspondingly crude; their
+width is the point.
 
 This inverts the naive reading of the benchmark:
 
-* **CB1** looks like the success (AUC 1.000) but is the clearest confound. Its actives
-  are the four largest, most lipophilic molecules in the control set (rimonabant 464 Da,
-  CP-55940 377, anandamide 348, Δ9-THC 314) against decoys with median MW 186. Sorting
-  by weight alone scores 0.958.
-* **ADORA2A** performs *below* the size baseline.
-* **MAOA** looks mediocre but is the only target where the model adds real signal
-  (+0.233) — despite tranylcypromine, a marketed irreversible MAO inhibitor, ranking
-  65 of 72 because at 133 Da the size prior buries it.
+* **CB1** is the only target whose separation survives correction in either space
+  (*p* = 0.005) — and it is also the one fully explained by size. Its actives are the
+  four largest, most lipophilic molecules in the control set (rimonabant 464 Da,
+  CP-55940 377, anandamide 348, Δ9-THC 314) against decoys of median MW 186. Molecular
+  weight alone scores 0.958, so the model contributes exactly one pair over a trivial
+  baseline. Significant, and uninformative.
+* **ADORA2A** fails in `pkd` space (*p* = 0.176, −1.0 pairs, one swapped pair the wrong
+  way). In `nm` space it reaches *p* = 0.033 and +3 pairs, which does not survive
+  correction.
+* **MAOA** has the largest margin over the size baseline in both spaces (+7 pairs in
+  `pkd`, +10 in `nm`) and is the closest thing here to a real signal — but it does not
+  survive correction in either (*p* = 0.089 and 0.026 against α = 0.0167). It is
+  suggestive and underpowered, which is a reason to test it properly rather than to
+  claim it. Note also that tranylcypromine — a marketed irreversible MAO inhibitor —
+  ranks 65 of 72 in `pkd` space, because at 133 Da the size prior buries it.
 
-### 4. The model cannot express "does not bind"
+**So no target demonstrates target-specific recognition that survives correction.**
+The one result that does survive is the one attributable to a size confound; the results
+that beat the confound do not survive. That holds in both aggregation spaces, which is
+the strongest form in which this project can state it.
+
+### 4. The decoys are over-predicted, and the actives are not
 
 Predicted affinities for molecules with no credible interaction at these targets:
 sucrose 6,423 nM (ADORA2A), citric acid 254 nM (CB1), D-glucose 51,537 nM (CB1).
 
-The actives are not badly predicted in absolute terms — caffeine came out at 16,095 nM
-at ADORA2A against a literature Ki of roughly 10–45 µM. It is the **decoys that are
-wildly over-predicted**, and that is what destroys the separation. The likely cause is
-the training distribution: BindingDB holds *measured* affinities, i.e. pairs someone
-considered worth assaying, so it contains few true non-binders. The model never learned
-what non-binding looks like.
+Meanwhile the actives are reasonable in absolute terms — caffeine came out at 16,095 nM
+at ADORA2A against a literature Ki of roughly 10–45 µM. So the separation fails from the
+decoy side, not the active side.
+
+**An earlier version of this section claimed the cause was that BindingDB "lacks true
+non-binders." That was wrong and has been removed.** BindingDB does contain large numbers
+of weak and threshold-inactive measurements, so the model is perfectly capable of
+emitting a low pKd. The more parsimonious explanation is the one in §1: the model applies
+a largely target-independent ligand prior, so a molecule's score reflects its own
+properties rather than its compatibility with the protein, and a mid-range score for
+sucrose is what that prior produces.
+
+Distinguishing those hypotheses would require inspecting the training distribution
+directly, which this project has not done. Stated here as an open question, not a
+finding.
+
+### 5. The ranking depends on an undocumented DeepPurpose flag
+
+`oneliner.repurpose` branches on `convert_y`, which reads like a units setting. It is
+not — it silently changes the estimator:
+
+| `convert_y` | Where averaging happens | Effective estimator in nM |
+|---|---|---|
+| `True` (oneliner's **default**) | nM | **arithmetic** mean — dominated by the weakest-binding model |
+| `False` | pKd | **geometric** mean |
+
+Over 20,000 random 4-model ensembles the two branches disagreed on rank order in
+**99.9%** of cases, with Spearman ρ as low as **−0.88**. They are different aggregations,
+not different presentations of one aggregation.
+
+**On this screen's actual data the effect is substantial:**
+
+| Target | Spearman (pKd vs nM space) | Identical ranking? |
+|---|---|---|
+| MAOA | 0.830 | No |
+| ADORA2A | 0.835 | No |
+| CB1 | 0.763 | No |
+
+A ρ of 0.76 is a lot of reordering. The rankings in this repository are therefore
+*conditional on* `aggregation_space: pkd` (the `convert_y=False` branch), and a reader
+who reproduced this with `oneliner`'s defaults would get a visibly different hit list.
+Every output carries the alternative as `pKd_aggregate_alt` so the difference is
+inspectable, and `dti-screen analyze` reports this table on any dataset.
+
+Whether the *conclusions* survive is a separate question, and one this repo answers
+rather than assumes:
+
+```bash
+dti-screen analyze --space nm     # re-derive every diagnostic under the other branch
+```
+
+Running both, the three findings behave differently:
+
+| Finding | `pkd` space | `nm` space | Robust? |
+|---|---|---|---|
+| §1 cross-target ρ (all molecules) | 0.910 – 0.954 | 0.949 – 0.985 | **Yes** — stronger under `nm` |
+| §2 pKd vs MW ρ | 0.42 – 0.52 | 0.33 – 0.46 | **Yes** — weaker under `nm` |
+| §3 significance vs MW baseline | nothing beats it | MAOA and ADORA2A appear to | **Only after correction** |
+
+The core claim — that the ensemble produces a largely target-independent ranking —
+is **not** an artefact of the aggregation choice. It is slightly *stronger* under
+DeepPurpose's own default.
+
+The benchmark table is the fragile one. Taken at face value, `nm` space promotes MAOA
+(*p* = 0.026) and ADORA2A (*p* = 0.033) to "significant", reversing §3's headline. Only
+the Bonferroni correction for three targets makes the two spaces agree. **That is the
+practical lesson from this section**: a flag most users would read as a units setting
+moved two of three targets across the conventional significance line, and the result
+only became stable once multiplicity was handled.
+
+No individual molecule's rank in this repo should be quoted without the aggregation
+setting attached.
+
+*An earlier version of this README claimed the two were equivalent. They are not; an
+external audit caught it.*
 
 ### Conclusion
 
@@ -232,15 +360,36 @@ prediction is almost entirely a property of the ligand. Molecular weight is one
 contributor (§2) but not the whole story — the honest statement is *target-independent
 ligand scoring*, not *a molecular-weight lookup*.
 
-The single defensible positive result is MAOA's +0.233 over the size baseline, and even
-that arrives with tranylcypromine — a marketed irreversible MAO inhibitor — ranked 65 of
-72.
+The closest thing to a positive result is MAOA's margin over the size baseline (+7 pairs
+in `pkd`, +10 in `nm`), and it does not survive correction for three targets in either
+space. It also arrives with tranylcypromine — a marketed irreversible MAO inhibitor —
+ranked 65 of 72. Treat it as the hypothesis worth testing properly, not as a finding.
 
-**This also exposes a design limitation in this project's own benchmark.** Because
-dietary decoys are systematically smaller than drug-like actives, AUC alone can be
-passed by a size prior. The MW baseline in §3 is the diagnostic; the proper fix is
-**property-matched decoys** (DUD-E style, matched on MW and logP), which is the first
-item in [Next steps](#next-steps).
+**The control benchmark in this repository is not currently valid evidence**, and that
+is a flaw in its design rather than a caveat on its results. The dietary decoys are
+systematically smaller than the drug-like actives, so a pure size prior can pass the
+test — and for CB1 that is exactly what happened. Until the decoys are **property-matched**
+(DUD-E style, matched on MW and logP), the AUC column measures drug-likeness, not target
+recognition. That is the first item in [Next steps](#next-steps).
+
+The sample size compounds it: 4–5 actives against 6 decoys cannot support a precise AUC,
+as the confidence intervals in §3 show. Both problems are fixable, and neither is
+disguised here.
+
+### A note on how these conclusions were checked
+
+This repository was submitted to an independent adversarial audit by a separate language
+model, instructed to falsify its claims rather than confirm them. The audit correctly
+identified (a) the sample-size problem above and (b) a genuine mathematical error: an
+earlier version asserted that aggregating in pKd space was "equivalent" to DeepPurpose's
+nM-space aggregation. It is not — see §5 and `screen.aggregate_pkd`. Both are fixed, and
+the audit's findings are recorded here rather than quietly patched. The claim about
+BindingDB in §4 was also withdrawn as a result.
+
+Fixing (b) is what surfaced §5: once both aggregation branches were implemented, running
+the benchmark under each showed that two of three targets cross the uncorrected
+significance line depending on which one is used. That was not visible before the audit,
+and it is the single most important caveat in this repository.
 
 ---
 
@@ -381,7 +530,7 @@ CPU.
 
 ```bash
 make setup-dev
-make test            # 114 tests
+make test            # 156 tests
 make test-fast       # skips tests needing torch/DeepPurpose
 make lint
 ```

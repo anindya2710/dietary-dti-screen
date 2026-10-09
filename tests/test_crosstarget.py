@@ -113,13 +113,17 @@ class TestMwBaseline:
     def test_size_only_model_does_not_beat_mw(self, ligand_only_df):
         out = mw_baseline_comparison(ligand_only_df)
         assert (out["delta"].abs() < 1e-9).all()
-        assert out["verdict"].str.contains("explained by molecular weight").all()
+        # verdict is now resolution-aware: a zero delta is within one swapped pair
+        assert out["verdict"].str.contains("indistinguishable").all()
+        assert (out["delta_in_pairs"].abs() < 1e-9).all()
 
     def test_target_specific_model_beats_mw(self, target_specific_df):
         out = mw_baseline_comparison(target_specific_df)
         assert (out["model_auc"] == 1.0).all()
         assert (out["delta"] > 0.05).any()
-        assert out["verdict"].str.contains("beats the size baseline").any()
+        assert out["verdict"].str.contains("exceeds the size baseline").any()
+        # a real effect must be worth more than one swapped pair
+        assert (out.loc[out["delta"] > 0.05, "delta_in_pairs"] > 1.0).all()
 
     def test_reports_the_confound_itself(self, ligand_only_df):
         out = mw_baseline_comparison(ligand_only_df)
@@ -167,6 +171,7 @@ class TestLoadAndRun:
             "size_correlation",
             "mw_baseline",
             "own_active_ranks",
+            "aggregation_sensitivity",
         }
         for name in out:
             assert (tmp_path / "diag" / f"diagnostic_{name}.csv").exists()

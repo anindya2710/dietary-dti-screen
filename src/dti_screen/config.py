@@ -6,7 +6,7 @@ import os
 from dataclasses import asdict, dataclass, field
 
 from .models import DEFAULT_ENSEMBLE
-from .screen import AGGREGATIONS
+from .screen import AGGREGATION_SPACES, AGGREGATIONS
 
 #: Accessions verified against UniProt (October 2026):
 #:   P21397 -> sp|P21397|AOFA_HUMAN  Amine oxidase [flavin-containing] A  GN=MAOA    527 aa
@@ -35,6 +35,10 @@ class ScreenConfig:
     targets: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_TARGETS))
     ensemble: list[str] = field(default_factory=lambda: list(DEFAULT_ENSEMBLE))
     aggregation: str = "agg_mean_max"
+    # "pkd" = DeepPurpose convert_y=False branch (this project's default).
+    # "nm"  = its convert_y=True branch, which oneliner.repurpose uses by
+    #         default. The two are NOT equivalent -- see screen.aggregate_pkd.
+    aggregation_space: str = "pkd"
 
     include_controls: bool = True
     dedupe: bool = True
@@ -44,6 +48,11 @@ class ScreenConfig:
         if self.aggregation not in AGGREGATIONS:
             raise ValueError(
                 f"aggregation must be one of {AGGREGATIONS}, got {self.aggregation!r}"
+            )
+        if self.aggregation_space not in AGGREGATION_SPACES:
+            raise ValueError(
+                f"aggregation_space must be one of {AGGREGATION_SPACES}, "
+                f"got {self.aggregation_space!r}"
             )
         if not self.targets:
             raise ValueError("at least one target is required")

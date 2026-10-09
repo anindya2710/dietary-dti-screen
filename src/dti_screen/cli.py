@@ -63,6 +63,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     an.add_argument("--indir", default="predictions", help="directory holding the screen output")
     an.add_argument("--outdir", default=None, help="where to write diagnostic CSVs")
+    an.add_argument(
+        "--space",
+        choices=["pkd", "nm"],
+        default=None,
+        help="re-derive pKd_aggregate in this space first, to test robustness to "
+             "DeepPurpose's convert_y branch (default: use the stored values)",
+    )
 
     tg = sub.add_parser("targets", help="fetch target sequences and exit")
     tg.add_argument("--config", help="YAML config file")
@@ -86,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
         from .crosstarget import run_analysis
 
         try:
-            run_analysis(args.indir, args.outdir)
+            run_analysis(args.indir, args.outdir, space=args.space)
         except (FileNotFoundError, ValueError) as exc:
             print(f"analysis error: {exc}", file=sys.stderr)
             return 2

@@ -1,4 +1,4 @@
-target,auc,n_actives,n_decoys,median_pkd_active,median_pkd_decoy,verdict
-MAOA,0.7666666666666667,5,6,5.370199799537659,4.691195860505104,weak separation - treat the ranking with caution
-ADORA2A,0.7083333333333334,4,6,5.719375640153885,5.031289875507355,weak separation - treat the ranking with caution
-CB1,1.0,4,6,7.996873170137405,5.975529745221138,actives clearly separated from decoys - ranking has signal
+target,auc,auc_ci_lo,auc_ci_hi,exact_p,auc_resolution,n_actives,n_decoys,median_pkd_active,median_pkd_decoy,verdict
+MAOA,0.7666666666666667,0.4,1.0,0.08874458874458875,0.03333333333333333,5,6,5.370199799537659,4.691195860505104,weak separation - treat the ranking with caution
+ADORA2A,0.7083333333333334,0.2916666666666667,1.0,0.1761904761904762,0.041666666666666664,4,6,5.719375640153885,5.031289875507355,weak separation - treat the ranking with caution
+CB1,1.0,1.0,1.0,0.004761904761904762,0.041666666666666664,4,6,7.996873170137405,5.975529745221138,actives clearly separated from decoys - ranking has signal

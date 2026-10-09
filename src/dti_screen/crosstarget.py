@@ -30,7 +30,12 @@ from itertools import combinations
 import numpy as np
 import pandas as pd
 
-from .benchmark import pairwise_auc
+from .benchmark import (
+    auc_resolution,
+    bootstrap_auc_ci,
+    exact_permutation_p,
+    pairwise_auc,
+)
 from .controls import control_roles
 
 
@@ -132,21 +137,70 @@ def mw_baseline_comparison(df: pd.DataFrame, roles: dict[str, str] | None = None
         model_auc = pairwise_auc(act["pKd_aggregate"], dec["pKd_aggregate"])
         mw_auc = pairwise_auc(act["MW"], dec["MW"])
         delta = model_auc - mw_auc
+        step = auc_resolution(len(act), len(dec))
+        ci_lo, ci_hi = bootstrap_auc_ci(act["pKd_aggregate"], dec["pKd_aggregate"])
+        p_exact = exact_permutation_p(act["pKd_aggregate"], dec["pKd_aggregate"])
+
+        # The verdict must respect the measurement's own resolution. With 4 actives and
+        # 6 decoys the AUC can only move in steps of 1/24 = 0.042, so a delta of 0.042
+        # is a single swapped pair. Any threshold finer than `step` is reading noise.
+        if abs(delta) <= step:
+            verdict = (
+                f"delta ({delta:+.3f}) is within one swapped pair ({step:.3f}); "
+                f"indistinguishable from the molecular-weight baseline"
+            )
+        elif delta > step:
+            verdict = f"model exceeds the size baseline by {delta / step:.1f} pairs"
+        else:
+            verdict = f"model is WORSE than the size baseline by {abs(delta) / step:.1f} pairs"
+
         rows.append(
             {
                 "target": target,
                 "model_auc": round(model_auc, 4),
+                "model_auc_ci_lo": round(ci_lo, 4),
+                "model_auc_ci_hi": round(ci_hi, 4),
+                "model_auc_exact_p": round(p_exact, 4) if np.isfinite(p_exact) else np.nan,
                 "mw_only_auc": round(mw_auc, 4),
                 "delta": round(delta, 4),
+                "auc_resolution": round(step, 4),
+                "delta_in_pairs": round(delta / step, 2) if step else np.nan,
                 "n_actives": len(act),
                 "n_decoys": len(dec),
                 "median_mw_active": round(float(act["MW"].median()), 1),
                 "median_mw_decoy": round(float(dec["MW"].median()), 1),
-                "verdict": (
-                    "AUC explained by molecular weight; no evidence of target recognition"
-                    if delta <= 0.05
-                    else "model beats the size baseline"
-                ),
+                "verdict": verdict,
+            }
+        )
+    return pd.DataFrame(rows).sort_values("target").reset_index(drop=True)
+
+
+def aggregation_sensitivity_table(df: pd.DataFrame, how: str = "agg_mean_max") -> pd.DataFrame:
+    """
+    How much does the choice of aggregation space change the ranking, per target?
+
+    Recomputes both DeepPurpose branches from the per-model ``pKd_<model>`` columns in
+    the output CSV. A Spearman well below 1.0 means the reported ranking depends on
+    ``convert_y`` -- a flag that reads like a units setting but silently swaps an
+    arithmetic mean in nM for a geometric one.
+    """
+    from .screen import aggregation_sensitivity
+
+    model_cols = [c for c in df.columns if c.startswith("pKd_") and c.endswith("bindingdb")]
+    if not model_cols:
+        return pd.DataFrame()
+
+    rows = []
+    for target, g in df.groupby("target"):
+        matrix = g[model_cols].to_numpy(float).T  # (n_models, n_molecules)
+        s = aggregation_sensitivity(matrix, how)
+        rows.append(
+            {
+                "target": target,
+                "spearman_pkd_vs_nm": round(s["spearman_rho"], 4),
+                "identical_ranking": s["same_order"],
+                "n_models": len(model_cols),
+                "n_molecules": len(g),
             }
         )
     return pd.DataFrame(rows).sort_values("target").reset_index(drop=True)
@@ -179,18 +233,48 @@ def run_analysis(
     predictions_dir: str = "predictions",
     output_dir: str | None = None,
     verbose: bool = True,
+    space: str | None = None,
 ) -> dict[str, pd.DataFrame]:
-    """Run every diagnostic, print a report, and write the tables as CSVs."""
+    """
+    Run every diagnostic, print a report, and write the tables as CSVs.
+
+    ``space`` re-derives ``pKd_aggregate`` from the per-model columns in the chosen
+    aggregation space before running anything, so every conclusion in this report can be
+    re-checked under DeepPurpose's other ``convert_y`` branch. Use it to establish
+    whether a finding is robust to that flag rather than assuming it is.
+    """
     output_dir = output_dir or predictions_dir
     os.makedirs(output_dir, exist_ok=True)
     df = load_predictions(os.path.join(predictions_dir, "all_targets_predictions.csv"))
     roles = control_roles()
+
+    if space is not None:
+        from .screen import aggregate_pkd
+
+        model_cols = [c for c in df.columns if c.startswith("pKd_") and c.endswith("bindingdb")]
+        if not model_cols:
+            raise ValueError(
+                "--space needs the per-model pKd_<model> columns; re-run the screen "
+                "with a current version to produce them."
+            )
+        how = str(df["aggregation"].iloc[0]) if "aggregation" in df.columns else "agg_mean_max"
+        parts = []
+        for _, g in df.groupby("target", sort=False):
+            g = g.copy()
+            g["pKd_aggregate"] = aggregate_pkd(g[model_cols].to_numpy(float).T, how, space=space)
+            g = g.sort_values("pKd_aggregate", ascending=False)
+            g["rank"] = range(1, len(g) + 1)
+            parts.append(g)
+        df = pd.concat(parts, ignore_index=True)
+        if verbose:
+            print(f"[re-derived pKd_aggregate in {space!r} space before analysis]\n")
 
     xt_all = cross_target_correlation(df, controls_only=False)
     xt_ctrl = cross_target_correlation(df, controls_only=True)
     size = size_correlation(df)
     base = mw_baseline_comparison(df, roles)
     ranks = own_active_ranks(df, roles)
+    aggsens = aggregation_sensitivity_table(df)
 
     if verbose:
         print("=" * 76)
@@ -217,10 +301,12 @@ def run_analysis(
         print(base.to_string(index=False))
         print(
             "\n  'delta' is the model's contribution beyond molecular weight on the same\n"
-            "  active/decoy split. delta <= 0.05 means that target's AUC is the size\n"
-            "  confound, not target recognition. This is a limitation of the decoy set:\n"
-            "  dietary decoys are smaller than drug-like actives. Property-matched\n"
-            "  decoys (matched MW/logP) would remove it."
+            "  active/decoy split, and 'auc_resolution' is the smallest change the metric\n"
+            "  can express (one swapped pair). A delta inside that resolution is not a\n"
+            "  measurement. The decoy set is confounded with size -- dietary decoys are\n"
+            "  systematically smaller than drug-like actives -- which INVALIDATES the AUC\n"
+            "  as evidence of target recognition. Property-matched decoys (DUD-E style,\n"
+            "  matched on MW and logP) are required before these numbers mean anything."
         )
 
         print("\n" + "=" * 76)
@@ -228,12 +314,26 @@ def run_analysis(
         print("=" * 76)
         print(ranks.to_string(index=False))
 
+        if not aggsens.empty:
+            print("\n" + "=" * 76)
+            print("DIAGNOSTIC 5 - Does the ranking survive DeepPurpose's convert_y flag?")
+            print("=" * 76)
+            print(aggsens.to_string(index=False))
+            print(
+                "\n  DeepPurpose aggregates in nM when convert_y=True (oneliner's default,\n"
+                "  an arithmetic mean dominated by the weakest-binding model) and in pKd\n"
+                "  when convert_y=False (a geometric mean). These are different estimators,\n"
+                "  not different units. Spearman near 1.0 means your conclusions are robust\n"
+                "  to that choice; well below 1.0 means they are not."
+            )
+
     out = {
         "cross_target_all": xt_all,
         "cross_target_controls": xt_ctrl,
         "size_correlation": size,
         "mw_baseline": base,
         "own_active_ranks": ranks,
+        "aggregation_sensitivity": aggsens,
     }
     written = []
     for name, table in out.items():

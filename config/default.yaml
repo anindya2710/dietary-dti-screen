@@ -36,6 +36,13 @@ ensemble:
 # agg_mean_max (DeepPurpose default) | mean | max_effect
 aggregation: agg_mean_max
 
+# Where the per-model averaging happens. NOT a units setting -- it changes the
+# estimator. "pkd" = DeepPurpose convert_y=False (geometric mean in nM);
+# "nm" = convert_y=True, oneliner's default (arithmetic mean in nM, dominated by
+# the weakest-binding model). They disagree on rank order in ~99.9% of random
+# ensembles. `dti-screen analyze` reports how much they disagree on YOUR data.
+aggregation_space: pkd
+
 # --- behaviour -----------------------------------------------------------------------
 include_controls: true      # strongly recommended: this is what makes results readable
 dedupe: true

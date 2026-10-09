@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from dti_screen.benchmark import interpret_auc, pairwise_auc
+from dti_screen.benchmark import interpret_auc, interpret_benchmark, pairwise_auc
 from dti_screen.screen import aggregate_pkd, nM_to_pkd, pkd_to_nM
 
 
@@ -122,3 +122,27 @@ class TestInterpretAuc:
     )
     def test_verdicts(self, auc, fragment):
         assert fragment in interpret_auc(auc)
+
+
+class TestInterpretBenchmark:
+    """The reported verdict must respect significance, not just AUC magnitude."""
+
+    def test_perfect_auc_but_small_n_is_still_flagged(self):
+        v = interpret_benchmark(1.000, 0.0048, 4, 6)
+        assert "significant separation" in v
+        assert "MW baseline" in v
+
+    def test_high_auc_without_significance_is_not_called_signal(self):
+        v = interpret_benchmark(0.767, 0.0887, 5, 6)
+        assert "NOT significant" in v
+        assert "signal" not in v.lower()
+
+    def test_non_significant_mentions_sample_size(self):
+        assert "4x6" in interpret_benchmark(0.708, 0.176, 4, 6)
+
+    def test_missing_p_degrades_gracefully(self):
+        v = interpret_benchmark(0.9, float("nan"), 4, 6)
+        assert "significance not computed" in v
+
+    def test_nan_auc(self):
+        assert "not computable" in interpret_benchmark(float("nan"), 0.1, 0, 6)
