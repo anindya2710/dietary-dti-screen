@@ -1,0 +1,4 @@
+target,n_actives,n_screened,best_rank,median_rank,worst_rank,ranks
+ADORA2A,4,72,8,37,42,"8, 36, 38, 42"
+CB1,4,72,1,5,9,"1, 4, 6, 9"
+MAOA,5,72,23,26,52,"23, 25, 26, 49, 52"

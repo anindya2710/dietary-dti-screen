@@ -1,4 +1,4 @@
 target,model_auc,model_auc_ci_lo,model_auc_ci_hi,model_auc_exact_p,mw_only_auc,delta,auc_resolution,delta_in_pairs,n_actives,n_decoys,median_mw_active,median_mw_decoy,verdict
-ADORA2A,0.7083,0.2917,1.0,0.1762,0.75,-0.0417,0.0417,-1.0,4,6,265.8,186.1,delta (-0.042) is within one swapped pair (0.042); indistinguishable from the molecular-weight baseline
+ADORA2A,0.875,0.625,1.0,0.0333,0.75,0.125,0.0417,3.0,4,6,265.8,186.1,model exceeds the size baseline by 3.0 pairs
 CB1,1.0,1.0,1.0,0.0048,0.9583,0.0417,0.0417,1.0,4,6,362.1,186.1,delta (+0.042) is within one swapped pair (0.042); indistinguishable from the molecular-weight baseline
-MAOA,0.7667,0.4,1.0,0.0887,0.5333,0.2333,0.0333,7.0,5,6,212.2,186.1,model exceeds the size baseline by 7.0 pairs
+MAOA,0.8667,0.6,1.0,0.026,0.5333,0.3333,0.0333,10.0,5,6,212.2,186.1,model exceeds the size baseline by 10.0 pairs

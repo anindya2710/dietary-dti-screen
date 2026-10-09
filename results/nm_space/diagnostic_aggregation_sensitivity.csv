@@ -1,0 +1,4 @@
+target,spearman_pkd_vs_nm,identical_ranking,n_models,n_molecules
+ADORA2A,0.8353,False,4,72
+CB1,0.7631,False,4,72
+MAOA,0.8299,False,4,72

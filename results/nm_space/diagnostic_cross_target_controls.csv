@@ -1,0 +1,4 @@
+target_a,target_b,spearman_rho,n_molecules,scope
+ADORA2A,CB1,0.9684,19,controls_only
+ADORA2A,MAOA,0.9877,19,controls_only
+CB1,MAOA,0.9456,19,controls_only

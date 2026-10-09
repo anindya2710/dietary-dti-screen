@@ -14,16 +14,16 @@ and *does the model beat sorting by molecular weight?*
 On the bundled 61-molecule dietary library, the answers are informative:
 
 ```
-                 model AUC   MW-only AUC    delta
-MAOA               0.767        0.533      +0.233     model beats the size baseline
-ADORA2A            0.708        0.750      -0.042     AUC explained by molecular weight
-CB1                1.000        0.958      +0.042     AUC explained by molecular weight
+            model AUC   MW-only   delta   in pairs   exact p
+MAOA          0.767      0.533    +0.233    +7.0      0.089
+ADORA2A       0.708      0.750    -0.042    -1.0      0.176
+CB1           1.000      0.958    +0.042    +1.0      0.005
 
-cross-target Spearman rho (same 72 molecules, different proteins):  0.910 - 0.954
-
-exact permutation p:  MAOA 0.089   ADORA2A 0.176   CB1 0.005
-AUC resolution:       one swapped pair = 0.042 (4x6) or 0.033 (5x6)
-Bonferroni (3 targets): alpha = 0.0167 -> only CB1 survives, in either aggregation space
+AUC resolution: one swapped pair = 0.042 (4x6) or 0.033 (5x6), so a delta of
+                +-0.042 is a single pair changing places, not a measurement
+Bonferroni (3 targets): alpha = 0.0167 -> only CB1 survives, in either
+                aggregation space -- and CB1's is the size-confounded one
+cross-target Spearman rho (72 molecules, different proteins): 0.910 - 0.954
 ```
 
 No target shows target-specific recognition that survives multiple-comparison
@@ -67,7 +67,7 @@ Install order matters, and the one-liner you'd expect does not work. See
 [Known friction](#known-friction) for why.
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/dietary-dti-screen.git
+git clone https://github.com/anindya2710/dietary-dti-screen.git
 cd dietary-dti-screen
 python -m venv .venv && source .venv/bin/activate
 make setup          # or follow the three steps below
@@ -233,16 +233,27 @@ are tested, so the Bonferroni threshold is 0.05/3 = 0.0167:
 | ADORA2A | 0.176 | 0.033 | No, in either space |
 | CB1 | 0.005 | 0.005 | **Yes, in both** |
 
-Counting all six tests as exploratory (α = 0.0083) gives the same answer. So the
-conclusion *is* stable — but only once the multiplicity is accounted for, and the
-uncorrected `nm` result would have told a reviewer something different.
+Counting all six tests as exploratory (α = 0.0083) gives the same answer.
+
+**But the correction method matters, and that is not a comfortable place to stand.**
+Bonferroni controls family-wise error. Benjamini-Hochberg controls false discovery rate,
+and under BH the `nm`-space p-values (0.005, 0.026, 0.033 against critical values 0.0167,
+0.0333, 0.05) would reject **all three** — restoring the appearance of signal at two
+targets. So the conclusion above holds under FWER control and not under FDR control.
+
+The resolution is not to argue about corrections. It is that **the decoy set is
+confounded with molecular size**, which invalidates the AUC as evidence of target
+recognition under any correction method. The multiplicity problem is real but secondary;
+property-matched decoys are the actual fix, and no amount of p-value adjustment
+substitutes for them.
 
 **Read the last column first.** With 4–5 actives and 6 decoys there are only 24–30
 pairwise comparisons, so AUC is quantised to steps of 1/24 = 0.042 or 1/30 = 0.033.
 A "delta" smaller than that step is one swapped pair, not a measurement. CB1's +0.042
 is exactly one pair.
 
-The *p*-values are exact, by complete enumeration of all C(10,4) = 210 or C(11,5) = 462
+The *p*-values come from an exact permutation test — complete enumeration of all
+C(10,4) = 210 or C(11,5) = 462
 labellings — no distributional assumption, which matters at this sample size. The
 confidence intervals are percentile bootstrap and are correspondingly crude; their
 width is the point.
