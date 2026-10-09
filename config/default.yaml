@@ -1,0 +1,42 @@
+# Default screening configuration.
+# Every key here maps to a field on dti_screen.config.ScreenConfig.
+# CLI flags override these values.
+
+# --- input ---------------------------------------------------------------------------
+input_csv: data/example_ingredients.csv
+smiles_col: SMILES          # change to match your CSV's header, e.g. moldb_smiles
+name_col: name              # set to null to auto-generate CMPD_00001 style IDs
+
+# --- output --------------------------------------------------------------------------
+output_dir: predictions
+work_dir: dp_work
+cache_dir: dp_work/uniprot_cache
+
+# --- targets -------------------------------------------------------------------------
+# label: UniProt accession. Verified October 2026:
+#   P21397  AOFA_HUMAN   monoamine oxidase A       527 aa
+#   P29274  AA2AR_HUMAN  adenosine A2a receptor    412 aa
+#   P21554  CNR1_HUMAN   cannabinoid receptor 1    472 aa
+# All are under the CNN encoder's 1000-residue limit, so none is truncated.
+targets:
+  MAOA: P21397
+  ADORA2A: P29274
+  CB1: P21554
+
+# --- model ---------------------------------------------------------------------------
+# The four non-MPNN members of DeepPurpose oneliner's ensemble. MPNN is excluded
+# because it requires dgl, which has no build compatible with current torch.
+# Adding any *_mpnn_* model here is rejected by config validation.
+ensemble:
+  - cnn_cnn_bindingdb
+  - morgan_cnn_bindingdb
+  - morgan_aac_bindingdb
+  - daylight_aac_bindingdb
+
+# agg_mean_max (DeepPurpose default) | mean | max_effect
+aggregation: agg_mean_max
+
+# --- behaviour -----------------------------------------------------------------------
+include_controls: true      # strongly recommended: this is what makes results readable
+dedupe: true
+quiet_deeppurpose: true

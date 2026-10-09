@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing / tooling
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.mypy_cache/
+
+# Pipeline outputs and scratch.
+# Predictions are regenerable; keeping them out of git avoids committing large CSVs.
+# If you want a result set in the repo for a writeup, commit it deliberately under
+# something like results/ and force-add it.
+predictions/
+dp_work/
+save_folder/
+pretrained_models/
+*.pkl
+
+# Local data. The small verified example set under data/ IS tracked;
+# large downloaded libraries are not.
+data/*
+!data/example_ingredients.csv
+!data/README.md
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+result/
+
+result/

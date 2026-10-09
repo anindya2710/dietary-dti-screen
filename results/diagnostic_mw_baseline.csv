@@ -1,0 +1,4 @@
+target,model_auc,mw_only_auc,delta,n_actives,n_decoys,median_mw_active,median_mw_decoy,verdict
+ADORA2A,0.7083,0.75,-0.0417,4,6,265.8,186.1,AUC explained by molecular weight; no evidence of target recognition
+CB1,1.0,0.9583,0.0417,4,6,362.1,186.1,AUC explained by molecular weight; no evidence of target recognition
+MAOA,0.7667,0.5333,0.2333,5,6,212.2,186.1,model beats the size baseline

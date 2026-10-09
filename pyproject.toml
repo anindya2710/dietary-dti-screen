@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dti-screen"
+version = "0.1.0"
+description = "Ensemble drug-target affinity screening of dietary small molecules, with an active/decoy control benchmark"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["cheminformatics", "drug-target-interaction", "deeppurpose", "rdkit", "virtual-screening"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Chemistry",
+]
+
+# NOTE: DeepPurpose is intentionally installed with --no-deps (see requirements.txt and
+# the README), because its declared requirements pull ax-platform and dgllife, which are
+# unused on this code path and add ~160 packages. Its real runtime imports are listed here.
+dependencies = [
+    "numpy>=1.23",
+    "pandas>=1.5",
+    "scipy>=1.9",
+    "scikit-learn>=1.1",
+    "requests>=2.28",
+    "PyYAML>=6.0",
+    "rdkit>=2023.3.1",
+    "torch>=1.13",
+    "tqdm>=4.64",
+    "matplotlib>=3.6",
+    "prettytable>=3.0",
+    "tensorboard>=2.11",
+    "lifelines>=0.27",      # DTI.py imports concordance_index at module level
+    "wget>=3.2",            # DeepPurpose.dataset imports this at module level
+    "subword-nmt>=0.3.8",
+    "pandas-flavor>=0.3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.1"]
+
+[project.scripts]
+dti-screen = "dti_screen.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/anindya2710/dietary-dti-screen"
+Issues = "https://github.com/anindya2710/dietary-dti-screen/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "needs_deeppurpose: requires torch + DeepPurpose to be importable",
+    "needs_network: requires outbound internet access",
+]
+# DeepPurpose 0.1.5 predates numpy 2.x; the noise comes from its internals, not ours.
+filterwarnings = [
+    "ignore:__array__ implementation doesn't accept a copy keyword:DeprecationWarning",
+    "ignore::DeprecationWarning:DeepPurpose.*",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]
