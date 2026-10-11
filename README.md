@@ -274,7 +274,9 @@ This inverts the naive reading of the benchmark:
   survive correction in either (*p* = 0.089 and 0.026 against α = 0.0167). It is
   suggestive and underpowered, which is a reason to test it properly rather than to
   claim it. Note also that tranylcypromine — a marketed irreversible MAO inhibitor —
-  ranks 65 of 72 in `pkd` space, because at 133 Da the size prior buries it.
+  ranks 65 of 72 in `pkd` space, which is consistent with the model's bias toward larger
+  molecules (it is 133 Da). That consistency is an observation, not a demonstrated
+  mechanism inside the network.
 
 **So no target demonstrates target-specific recognition that survives correction.**
 The one result that does survive is the one attributable to a size confound; the results
@@ -402,6 +404,29 @@ the benchmark under each showed that two of three targets cross the uncorrected
 significance line depending on which one is used. That was not visible before the audit,
 and it is the single most important caveat in this repository.
 
+A second review round then found a latent defect in the control matching itself. The
+pipeline identifies a user's compound as a control by canonical SMILES, but the benchmark
+selected controls by *name* — so a library listing caffeine as, say,
+"1,3,7-trimethylxanthine" would have it flagged as a control and then silently excluded
+from the AUC, costing one of four ADORA2A actives with no warning. It did not affect the
+results here, because the bundled library happens to use matching names. Control matching
+is now keyed on structure throughout (`controls.role_series`), with regression tests in
+`tests/test_control_matching.py`.
+
+### Provenance
+
+The implementation in `src/` and `tests/` was written with the help of an AI coding
+assistant, under my direction and review. The project concept, the choice of targets,
+the decision to build this as a package rather than a notebook, and the decision to
+subject the whole thing to adversarial audit were mine, as was the verification of
+every result against the files that produced it.
+
+The audits described above were run against that AI-written code precisely because it
+was AI-written. Both rounds found real defects — a false mathematical equivalence,
+small-sample statistics that did not respect the metric's own resolution, and a latent
+control-matching bug. That is the point: generated code is a draft to be verified, not
+a result. Findings are documented above, not quietly patched.
+
 ---
 
 ## Reading the results
@@ -508,7 +533,7 @@ and marked `cnn_smiles_truncated` rather than discarded.
 
 ## Known friction
 
-Things that will cost you an evening if you meet them cold.
+Things that will may cost an evening if you meet them cold.
 
 **`pip install DeepPurpose` produces a package that cannot be imported.**
 `DeepPurpose/utils.py` does `raise ImportError` at module level if `descriptastorus` is
@@ -541,7 +566,7 @@ CPU.
 
 ```bash
 make setup-dev
-make test            # 156 tests
+make test            # 170 tests
 make test-fast       # skips tests needing torch/DeepPurpose
 make lint
 ```
@@ -575,8 +600,7 @@ src/dti_screen/
 
 ## Next steps
 
-Ordered by value, and honestly: the first two are what would turn this from "I ran a
-model" into "I validated a model."
+Ordered by value:
 
 1. **Property-matched decoys.** The current decoy set is confounded with molecular size
    (see [Results §3](#3-against-an-mw-only-baseline-two-of-three-aucs-vanish)). Sampling

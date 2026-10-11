@@ -137,3 +137,35 @@ def control_roles() -> dict[str, str]:
     """``{compound_name: control_for}`` for every verified control."""
     df = verify_control_structures()
     return dict(zip(df["compound_name"], df["control_for"]))
+
+
+def control_roles_by_smiles() -> dict[str, str]:
+    """``{canonical_smiles: control_for}`` for every verified control."""
+    df = verify_control_structures()
+    return dict(zip(df["SMILES"], df["control_for"]))
+
+
+def role_series(frame: pd.DataFrame, roles_by_name: dict[str, str] | None = None):
+    """
+    Role for each row of ``frame``: ``<target label>``, ``"decoy"``, or ``NaN``.
+
+    Matches on **canonical SMILES first**, falling back to compound name. Structure is
+    the identity that matters; a name is just a label the user chose.
+
+    This ordering fixes a real defect found in external review. The pipeline tags a
+    user's row as a control by comparing canonical SMILES, so a library containing
+    caffeine under the name "1,3,7-trimethylxanthine" is correctly flagged. But the
+    benchmark used to select controls by name, so that row was silently dropped from
+    the AUC — losing one of four ADORA2A actives without any warning. Matching on
+    structure keeps the two steps consistent.
+    """
+    import pandas as pd
+
+    by_name = control_roles() if roles_by_name is None else roles_by_name
+    by_smiles = control_roles_by_smiles()
+
+    if "canonical_smiles" in frame.columns:
+        out = frame["canonical_smiles"].map(by_smiles)
+    else:
+        out = pd.Series(index=frame.index, dtype=object)
+    return out.where(out.notna(), frame["compound_name"].map(by_name))

@@ -180,13 +180,16 @@ def benchmark_target(
     ``roles`` maps compound name -> target label or ``"decoy"``
     (see :func:`dti_screen.controls.control_roles`).
     """
-    sub = results[results["compound_name"].isin(roles)].copy()
+    from .controls import role_series
+
+    mapped_all = role_series(results, roles)
+    sub = results[mapped_all.notna()].copy()
     if sub.empty:
         if verbose:
             print(f"\n=== {target_label}: control benchmark - no controls present ===")
         return {"target": target_label, "auc": float("nan"), "n_actives": 0, "n_decoys": 0}
 
-    mapped = sub["compound_name"].map(roles)
+    mapped = mapped_all[mapped_all.notna()]
     sub["role"] = np.where(
         mapped == target_label,
         "ACTIVE",

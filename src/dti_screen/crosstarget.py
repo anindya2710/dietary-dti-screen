@@ -36,7 +36,7 @@ from .benchmark import (
     exact_permutation_p,
     pairwise_auc,
 )
-from .controls import control_roles
+from .controls import control_roles, role_series
 
 
 def load_predictions(path: str) -> pd.DataFrame:
@@ -79,7 +79,11 @@ def cross_target_correlation(df: pd.DataFrame, controls_only: bool = False) -> p
     central diagnostic for ligand-only behaviour.
     """
     sub = df[df["is_control"]] if (controls_only and "is_control" in df.columns) else df
-    wide = sub.pivot_table(index="compound_name", columns="target", values="pKd_aggregate")
+    # Pivot on canonical SMILES, not compound_name: names are not guaranteed unique
+    # (isomers can share a generic name), and pivot_table would silently average their
+    # distinct affinities together before the correlation is computed.
+    idx = "canonical_smiles" if "canonical_smiles" in sub.columns else "compound_name"
+    wide = sub.pivot_table(index=idx, columns="target", values="pKd_aggregate")
     wide = wide.dropna()
     if wide.shape[1] < 2:
         raise ValueError(
@@ -127,8 +131,9 @@ def mw_baseline_comparison(df: pd.DataFrame, roles: dict[str, str] | None = None
     roles = roles or control_roles()
     rows = []
     for target, g in df.groupby("target"):
-        g = g[g["compound_name"].isin(roles)].copy()
-        mapped = g["compound_name"].map(roles)
+        m_all = role_series(g, roles)
+        g = g[m_all.notna()].copy()
+        mapped = m_all[m_all.notna()]
         act = g[mapped == target]
         dec = g[mapped == "decoy"]
         if act.empty or dec.empty:
@@ -211,7 +216,7 @@ def own_active_ranks(df: pd.DataFrame, roles: dict[str, str] | None = None) -> p
     roles = roles or control_roles()
     rows = []
     for target, g in df.groupby("target"):
-        mapped = g["compound_name"].map(roles)
+        mapped = role_series(g, roles)
         act = g[mapped == target]
         if act.empty:
             continue
