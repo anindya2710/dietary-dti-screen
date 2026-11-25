@@ -38,6 +38,24 @@ from .benchmark import (
 )
 from .controls import control_roles, role_series
 
+#: Columns that start with ``pKd_`` but summarise the ensemble rather than naming one
+#: of its members. Everything else with that prefix is a per-model prediction.
+SUMMARY_PKD_COLUMNS = frozenset(
+    {"pKd_aggregate", "pKd_aggregate_alt", "pKd_mean", "pKd_std"}
+)
+
+
+def model_pkd_columns(df: pd.DataFrame) -> list[str]:
+    """
+    The per-model ``pKd_<model>`` columns, whatever the checkpoints are named.
+
+    Selecting them by checkpoint name (``endswith("bindingdb")``) matched nothing on
+    any other pretrained set, such as Davis or KIBA, which silently removed diagnostic
+    5 from the report rather than failing. The ensemble is configurable
+    (``config/default.yaml``), so the four summary columns are excluded by name instead.
+    """
+    return [c for c in df.columns if c.startswith("pKd_") and c not in SUMMARY_PKD_COLUMNS]
+
 
 def load_predictions(path: str) -> pd.DataFrame:
     """Load the combined predictions CSV written by the screen."""
@@ -106,16 +124,31 @@ def cross_target_correlation(df: pd.DataFrame, controls_only: bool = False) -> p
     return pd.DataFrame(rows)
 
 
-def size_correlation(df: pd.DataFrame) -> pd.DataFrame:
-    """Rank correlation between predicted affinity and molecular weight, per target."""
+def size_correlation(df: pd.DataFrame, controls_only: bool = False) -> pd.DataFrame:
+    """
+    Rank correlation between predicted affinity and molecular weight, per target.
+
+    With ``controls_only``, restricted to the control set. That restriction matters:
+    the controls are the size-confounded subset the AUC is computed on, so the
+    correlation there, and not the one across the whole library, is what bears on
+    whether the benchmark is measuring size.
+
+    ``is_control`` is optional in a predictions CSV (:func:`load_predictions` does not
+    require it). Without it there is no control set to restrict to, so a controls-only
+    request returns nothing rather than relabelling the whole library as controls.
+    """
+    if controls_only and "is_control" not in df.columns:
+        return pd.DataFrame(columns=["target", "spearman_pkd_vs_mw", "n_molecules", "scope"])
+    sub = df[df["is_control"]] if controls_only else df
     rows = []
-    for target, g in df.groupby("target"):
+    for target, g in sub.groupby("target"):
         g = g.dropna(subset=["MW", "pKd_aggregate"])
         rows.append(
             {
                 "target": target,
                 "spearman_pkd_vs_mw": round(_spearman(g["MW"], g["pKd_aggregate"]), 4),
                 "n_molecules": len(g),
+                "scope": "controls_only" if controls_only else "all_molecules",
             }
         )
     return pd.DataFrame(rows).sort_values("target").reset_index(drop=True)
@@ -191,7 +224,7 @@ def aggregation_sensitivity_table(df: pd.DataFrame, how: str = "agg_mean_max") -
     """
     from .screen import aggregation_sensitivity
 
-    model_cols = [c for c in df.columns if c.startswith("pKd_") and c.endswith("bindingdb")]
+    model_cols = model_pkd_columns(df)
     if not model_cols:
         return pd.DataFrame()
 
@@ -252,17 +285,20 @@ def run_analysis(
     os.makedirs(output_dir, exist_ok=True)
     df = load_predictions(os.path.join(predictions_dir, "all_targets_predictions.csv"))
     roles = control_roles()
+    # The aggregation the screen actually ran with. Diagnostic 5 compares the two
+    # spaces under this strategy; assuming the default would report the sensitivity of
+    # a run that never happened.
+    how = str(df["aggregation"].iloc[0]) if "aggregation" in df.columns else "agg_mean_max"
 
     if space is not None:
         from .screen import aggregate_pkd
 
-        model_cols = [c for c in df.columns if c.startswith("pKd_") and c.endswith("bindingdb")]
+        model_cols = model_pkd_columns(df)
         if not model_cols:
             raise ValueError(
                 "--space needs the per-model pKd_<model> columns; re-run the screen "
                 "with a current version to produce them."
             )
-        how = str(df["aggregation"].iloc[0]) if "aggregation" in df.columns else "agg_mean_max"
         parts = []
         for _, g in df.groupby("target", sort=False):
             g = g.copy()
@@ -276,10 +312,11 @@ def run_analysis(
 
     xt_all = cross_target_correlation(df, controls_only=False)
     xt_ctrl = cross_target_correlation(df, controls_only=True)
-    size = size_correlation(df)
+    size = size_correlation(df, controls_only=False)
+    size_ctrl = size_correlation(df, controls_only=True)
     base = mw_baseline_comparison(df, roles)
     ranks = own_active_ranks(df, roles)
-    aggsens = aggregation_sensitivity_table(df)
+    aggsens = aggregation_sensitivity_table(df, how)
 
     if verbose:
         print("=" * 76)
@@ -298,7 +335,13 @@ def run_analysis(
         print("\n" + "=" * 76)
         print("DIAGNOSTIC 2 - Is the score a proxy for molecular size?")
         print("=" * 76)
-        print(size.to_string(index=False))
+        print(pd.concat([size, size_ctrl]).to_string(index=False))
+        print(
+            "\n  The second block is the control set alone. The controls are where the\n"
+            "  size confound lives -- the dietary decoys are smaller than the drug-like\n"
+            "  actives -- so a correlation that is higher there than across the library\n"
+            "  is a warning about the AUC in particular, not about the ranking at large."
+        )
 
         print("\n" + "=" * 76)
         print("DIAGNOSTIC 3 - Does the model beat sorting by molecular weight?")
@@ -336,6 +379,7 @@ def run_analysis(
         "cross_target_all": xt_all,
         "cross_target_controls": xt_ctrl,
         "size_correlation": size,
+        "size_correlation_controls": size_ctrl,
         "mw_baseline": base,
         "own_active_ranks": ranks,
         "aggregation_sensitivity": aggsens,

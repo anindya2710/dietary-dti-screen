@@ -19,13 +19,17 @@ import pytest
 
 from dti_screen.controls import verify_control_structures
 from dti_screen.crosstarget import (
+    SUMMARY_PKD_COLUMNS,
+    aggregation_sensitivity_table,
     cross_target_correlation,
     load_predictions,
+    model_pkd_columns,
     mw_baseline_comparison,
     own_active_ranks,
     run_analysis,
     size_correlation,
 )
+from dti_screen.screen import aggregate_pkd
 
 TARGETS = ["MAOA", "ADORA2A", "CB1"]
 
@@ -169,9 +173,135 @@ class TestLoadAndRun:
             "cross_target_all",
             "cross_target_controls",
             "size_correlation",
+            "size_correlation_controls",
             "mw_baseline",
             "own_active_ranks",
             "aggregation_sensitivity",
         }
         for name in out:
             assert (tmp_path / "diag" / f"diagnostic_{name}.csv").exists()
+
+
+# ---------------------------------------------------------------------------------
+# Regression tests for the third audit round (2026-11-25). Each one fails against the
+# code as it stood before that round; see README, "A note on how these conclusions
+# were checked".
+# ---------------------------------------------------------------------------------
+
+
+def _frame_with_model_columns(model_suffix: str = "bindingdb", aggregation: str = "agg_mean_max"):
+    """
+    A predictions-shaped frame carrying four per-model pKd columns.
+
+    ``model_suffix`` stands in for the checkpoint family, so the same frame can be
+    built as a BindingDB ensemble or as the Davis/KIBA ensemble that
+    ``config/default.yaml`` also allows.
+    """
+    rng = np.random.default_rng(11)
+    ctrl = verify_control_structures()
+    rows = []
+    for target in TARGETS:
+        n = len(ctrl)
+        per_model = rng.uniform(4.0, 9.0, size=(4, n))
+        g = pd.DataFrame(
+            {
+                "compound_name": ctrl["compound_name"].to_numpy(),
+                "canonical_smiles": ctrl["SMILES"].to_numpy(),
+                "formula": ctrl["formula"].to_numpy(),
+                "MW": ctrl["MW"].to_numpy(),
+                "is_control": True,
+                "target": target,
+                "aggregation": aggregation,
+            }
+        )
+        for i, encoder in enumerate(("cnn_cnn", "morgan_cnn", "morgan_aac", "daylight_aac")):
+            g[f"pKd_{encoder}_{model_suffix}"] = per_model[i]
+        g["pKd_mean"] = per_model.mean(axis=0)
+        g["pKd_std"] = per_model.std(axis=0)
+        g["pKd_aggregate"] = aggregate_pkd(per_model, aggregation, space="pkd")
+        g["pKd_aggregate_alt"] = aggregate_pkd(per_model, aggregation, space="nm")
+        g = g.sort_values("pKd_aggregate", ascending=False)
+        g["rank"] = np.arange(1, len(g) + 1)
+        rows.append(g)
+    return pd.concat(rows, ignore_index=True)
+
+
+class TestModelColumnSelection:
+    """Per-model columns were selected by checkpoint name, which matched only BindingDB."""
+
+    def test_summary_columns_are_excluded(self):
+        df = _frame_with_model_columns()
+        cols = model_pkd_columns(df)
+        assert len(cols) == 4
+        assert not SUMMARY_PKD_COLUMNS & set(cols)
+
+    def test_non_bindingdb_checkpoints_are_found(self):
+        df = _frame_with_model_columns(model_suffix="davis")
+        assert len(model_pkd_columns(df)) == 4
+
+    def test_diagnostic_5_survives_a_non_bindingdb_ensemble(self):
+        """It used to return an empty table, so the diagnostic vanished without a word."""
+        out = aggregation_sensitivity_table(_frame_with_model_columns(model_suffix="davis"))
+        assert len(out) == len(TARGETS)
+        assert out["n_models"].eq(4).all()
+
+
+class TestAggregationSensitivityUsesTheRunsAggregation:
+    """Diagnostic 5 assumed agg_mean_max whatever the screen actually ran with."""
+
+    def test_max_effect_is_identical_in_both_spaces(self):
+        # max_effect is nanmax in pKd and nanmin in nM, which is the same molecule
+        # either way, so the two spaces must agree exactly.
+        out = aggregation_sensitivity_table(_frame_with_model_columns(), "max_effect")
+        assert np.allclose(out["spearman_pkd_vs_nm"], 1.0)
+        assert out["identical_ranking"].all()
+
+    def test_agg_mean_max_is_not_identical(self):
+        out = aggregation_sensitivity_table(_frame_with_model_columns(), "agg_mean_max")
+        assert (out["spearman_pkd_vs_nm"] < 1.0).all()
+
+    def test_run_analysis_reads_the_aggregation_from_the_data(self, tmp_path):
+        pred = tmp_path / "predictions"
+        pred.mkdir()
+        _frame_with_model_columns(aggregation="max_effect").to_csv(
+            pred / "all_targets_predictions.csv", index=False
+        )
+        out = run_analysis(str(pred), str(tmp_path / "diag"), verbose=False)
+        sens = out["aggregation_sensitivity"]
+        assert np.allclose(sens["spearman_pkd_vs_nm"], 1.0), (
+            "a max_effect run was reported under agg_mean_max"
+        )
+        assert sens["identical_ranking"].all()
+
+
+class TestSizeCorrelationScope:
+    """The README reported a controls-only rho that no code path produced."""
+
+    def test_controls_only_is_labelled_and_counted(self, ligand_only_df):
+        df = ligand_only_df.copy()
+        # add one non-control molecule per target, so the two scopes differ in size
+        extra = df[df["target"] == df["target"].iloc[0]].head(1).copy()
+        rows = []
+        for target in TARGETS:
+            e = extra.copy()
+            e["target"] = target
+            e["compound_name"] = "library_molecule"
+            e["canonical_smiles"] = "CCO"
+            e["is_control"] = False
+            rows.append(e)
+        df = pd.concat([df, *rows], ignore_index=True)
+
+        all_scope = size_correlation(df, controls_only=False)
+        ctrl_scope = size_correlation(df, controls_only=True)
+
+        assert set(all_scope["scope"]) == {"all_molecules"}
+        assert set(ctrl_scope["scope"]) == {"controls_only"}
+        assert (ctrl_scope["n_molecules"] < all_scope["n_molecules"]).all()
+        assert ctrl_scope["n_molecules"].eq(int(df["is_control"].sum() / len(TARGETS))).all()
+
+    def test_controls_only_without_the_column_returns_nothing(self, ligand_only_df):
+        """is_control is optional, so a missing column must not relabel the library."""
+        df = ligand_only_df.drop(columns=["is_control"])
+        out = size_correlation(df, controls_only=True)
+        assert out.empty
+        assert list(out.columns) == ["target", "spearman_pkd_vs_mw", "n_molecules", "scope"]

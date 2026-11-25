@@ -9,15 +9,22 @@ That statistic is the area under the ROC curve. It is computed here by direct pa
 comparison with a half-credit tie correction (the Mann-Whitney U formulation), which
 needs no extra dependency and is exact for these sample sizes.
 
-How to read the result
-----------------------
+How large the separation looks
+------------------------------
 ==========  ==================================================================
-AUC         Interpretation
+AUC         Magnitude (:func:`interpret_auc`)
 ==========  ==================================================================
->= 0.8      Actives clearly separated. The ranking carries signal.
+>= 0.8      Actives separated. Necessary, but not sufficient on its own.
 0.6 - 0.8   Weak separation. Treat the ranking as a soft prior at best.
 < 0.6       No usable separation. This target's scores are noise.
 ==========  ==================================================================
+
+That table is a description of the magnitude, not the verdict. At 4-6 molecules per
+group the magnitude alone says very little: an AUC of 1.000 on 24 pairs is still only
+p = 0.005, and 0.767 on 30 pairs is not significant at all. The reported verdict comes
+from :func:`interpret_benchmark`, which reads the exact permutation p as well, and a
+significant AUC still has to beat the molecular-weight baseline in
+:mod:`dti_screen.crosstarget` before it is evidence of target recognition.
 
 An AUC near 0.5 is a real and reportable finding, not a bug. Sequence-based DTI models
 applied to dietary chemistry are extrapolating, and documenting where that fails is

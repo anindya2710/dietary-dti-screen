@@ -150,7 +150,7 @@ lists the columns it did find.
 | `all_targets_predictions.csv` | All targets concatenated |
 | `control_benchmark.csv` | Per-target AUC, medians, verdict |
 | `rejected_molecules.csv` | Every dropped row, with the reason |
-| `diagnostic_*.csv` | From `dti-screen analyze`: cross-target correlation, size correlation, MW baseline, own-active ranks |
+| `diagnostic_*.csv` | From `dti-screen analyze`: cross-target correlation (all molecules and controls only), size correlation (all molecules and controls only), MW baseline, own-active ranks, aggregation sensitivity |
 
 Key columns: `predicted_Kd_nM` (lower = stronger), `pKd_aggregate` (higher = stronger),
 `pKd_std` (ensemble disagreement), one `pKd_<model>` per ensemble member,
@@ -190,15 +190,18 @@ Spearman of predicted pKd against molecular weight:
 | Target | rho (all 72) | rho (19 controls) |
 |---|---|---|
 | MAOA | 0.454 | 0.714 |
-| ADORA2A | 0.522 | 0.755 |
+| ADORA2A | 0.522 | 0.751 |
 | CB1 | 0.419 | 0.691 |
+
+Both columns come from `size_correlation()`: `diagnostic_size_correlation.csv` and
+`diagnostic_size_correlation_controls.csv`.
 
 Across the full dietary library the size dependence is **moderate, not dominant** —
 rho ≈ 0.42–0.52 accounts for well under a third of the rank variance. So "it is just
 predicting molecular weight" would be an overstatement.
 
 But note the gap between the two columns. Size correlates far more strongly *within the
-19 controls* (0.69–0.76) than across the library as a whole. The control set is the
+19 controls* (0.69–0.75) than across the library as a whole. The control set is the
 size-confounded subset, which is exactly why the AUC computed on it is unreliable — and
 why §3 is the diagnostic that matters rather than this one.
 
@@ -413,6 +416,51 @@ results here, because the bundled library happens to use matching names. Control
 is now keyed on structure throughout (`controls.role_series`), with regression tests in
 `tests/test_control_matching.py`.
 
+A third round, in November 2026, audited the repository as published rather than the
+code alone, and found eight defects. None of them changes a conclusion. What they have
+in common is a gap between what the repository claims and what it actually does.
+
+Three were in the committed artifacts. Firstly, `results/control_benchmark.csv` still
+carried the pre-audit verdicts, so the committed file described CB1's ranking as having
+"signal" while `interpret_benchmark` and `tests/test_screen.py` both say the opposite.
+That verdict is a function of the AUC, the exact p and the two group sizes, all of which
+were already in the file, so it was recomputed from them rather than re-run. Secondly,
+§2's controls-only correlations came from no code path at all: `size_correlation()`
+only measured across all 72 molecules. It now takes `controls_only`, as
+`cross_target_correlation()` already did, and implementing it immediately showed why
+that mattered. Two of the three numbers reproduced exactly; ADORA2A's was 0.755 in the
+table and is 0.751 when computed, so it had been mistranscribed. The correction does
+not change the section's point, which is that size correlates more strongly inside the
+control set than across the library, but it is the sort of error that only a committed
+code path can catch. Thirdly, only one of the three per-target prediction CSVs had been
+committed, so `dti-screen analyze --indir results` failed outright and none of the
+diagnostics in `results/` could be re-derived from the repository. All three are now
+committed, along with `all_targets_predictions.csv`; the files are about 30 KB together.
+Re-running `analyze` over them reproduced every other committed diagnostic unchanged.
+
+Two were in the Colab notebook, which could not have worked. Fourthly, `pip install
+git+...` resolves `pyproject.toml`, not `requirements.txt`, so `descriptastorus` was
+never installed and the screen failed with an `ImportError` several cells later, after
+the restart. The notebook's own text said it was being installed. It now is. Fifthly,
+that notebook still presented the pre-audit "AUC >= 0.8 means signal" table and never
+ran `analyze`, the step this README calls mandatory. Both are fixed, and the magnitude
+table here and in `benchmark.py` is now labelled as a description of magnitude rather
+than as a verdict.
+
+Three were in the code and its tests. Sixthly, per-model columns were selected with
+`endswith("bindingdb")`, which matches nothing on the Davis or KIBA checkpoints the
+configuration allows, so diagnostic 5 would have disappeared from the report without a
+warning. Seventhly, `run_analysis` never passed the run's own aggregation to that
+diagnostic, so a `max_effect` run was reported at rho 0.51–0.65 when the two spaces in
+fact agree exactly. Eighthly, the test in `TestVerdictRespectsResolution` claimed to
+check that a one-pair delta is called indistinguishable, but its fixture produced a
+delta of zero and it never asserted on the verdict at all. All three now have regression
+tests, at the end of `tests/test_crosstarget.py` and in `tests/test_statistics.py`.
+
+The first two rounds audited the code. This one audited what a reader meets first: the
+committed CSVs, the numbers quoted in this README, and the notebook. Those can be wrong
+while the code is right, and here they were.
+
 ### Provenance
 
 The implementation in `src/` and `tests/` was written with the help of an AI coding
@@ -441,11 +489,22 @@ declared rather than inferred.
 **The benchmark is the first thing to read.** `pKd_std` tells you whether the four models
 agree; the AUC tells you whether agreement means anything.
 
-| AUC | Interpretation |
-|-----|----------------|
-| ≥ 0.8 | Actives clearly separated. The ranking carries signal. |
+| AUC | How large the separation looks |
+|-----|--------------------------------|
+| ≥ 0.8 | Actives separated. Necessary, but not sufficient on its own. |
 | 0.6–0.8 | Weak separation. A soft prior at best. |
 | < 0.6 | No usable separation. This target's scores are noise. |
+
+That table describes the magnitude only (`benchmark.interpret_auc`). It is not the
+reported verdict, and on a control set this small it cannot be. An AUC of 1.000 on 24
+pairs is still only p = 0.005, and an AUC of 0.767 on 30 pairs is not significant at all.
+The `verdict` column in `control_benchmark.csv` comes from `interpret_benchmark`, which
+reads the exact permutation p as well as the AUC, so it will call a large AUC "NOT
+significant" where that is what the sample size supports.
+
+A significant AUC is still not evidence of target recognition. The decoys here are
+confounded with molecular size, so `dti-screen analyze` and its MW-only baseline (§3)
+are what decide whether the separation means anything.
 
 An AUC near 0.5 is a result, not a bug — and reporting it is the most valuable thing this
 repo produces.

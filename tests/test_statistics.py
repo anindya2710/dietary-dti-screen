@@ -115,16 +115,26 @@ class TestVerdictRespectsResolution:
         from dti_screen.crosstarget import mw_baseline_comparison
 
         roles = {f"a{i}": "T" for i in range(4)} | {f"d{i}": "decoy" for i in range(6)}
-        # actives marginally ahead: exactly one pair's worth
+        # The model separates perfectly (AUC 1.0). One decoy's MW sits above exactly
+        # one active's (300), and below the other three, so the MW-only AUC is 23/24
+        # and the delta is exactly one swapped pair. Putting that decoy any higher
+        # clears two actives and the test stops exercising the resolution rule.
         rows = []
         for i in range(4):
             rows.append({"compound_name": f"a{i}", "target": "T",
                          "pKd_aggregate": 6.0 + i * 0.1, "MW": 300 + i, "rank": i + 1})
         for i in range(6):
             rows.append({"compound_name": f"d{i}", "target": "T",
-                         "pKd_aggregate": 5.0 + i * 0.1, "MW": 290 + i, "rank": 5 + i})
+                         "pKd_aggregate": 5.0 + i * 0.1,
+                         "MW": 300.5 if i == 5 else 290 + i, "rank": 5 + i})
         out = mw_baseline_comparison(pd.DataFrame(rows), roles)
         # the table rounds to 4 dp, so compare at that precision
+        assert out["model_auc"].iloc[0] == pytest.approx(1.0)
+        assert out["mw_only_auc"].iloc[0] == pytest.approx(23 / 24, abs=5e-5)
+        assert out["delta"].iloc[0] == pytest.approx(1 / 24, abs=5e-5)
         assert out["auc_resolution"].iloc[0] == pytest.approx(1 / 24, abs=5e-5)
-        assert "delta_in_pairs" in out.columns
+        assert out["delta_in_pairs"].iloc[0] == pytest.approx(1.0, abs=5e-3)
+        # the point of the test: one pair of movement is not the model beating the baseline
+        assert "indistinguishable" in out["verdict"].iloc[0]
+        assert "exceeds" not in out["verdict"].iloc[0]
         assert {"model_auc_ci_lo", "model_auc_ci_hi", "model_auc_exact_p"} <= set(out.columns)

@@ -1,0 +1,4 @@
+target,spearman_pkd_vs_mw,n_molecules,scope
+ADORA2A,0.7509,19,controls_only
+CB1,0.6912,19,controls_only
+MAOA,0.714,19,controls_only
