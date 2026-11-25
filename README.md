@@ -599,6 +599,15 @@ Things that will may cost an evening if you meet them cold.
 missing. It is **not on PyPI** and **not in DeepPurpose's own `requirements.txt`**. It
 must come from git — `requirements.txt` here handles it.
 
+**`descriptastorus` needs `six` and does not say so.** `descriptastorus/raw.py` imports
+`six` at module level, but the package declares only `pandas_flavor`, `rdkit`, `scipy`
+and `numpy`. For years `six` arrived anyway, through `pandas → python-dateutil → six`.
+`python-dateutil` dropped `six` after 2.9, so it no longer does, and the import now
+fails in any fresh environment. DeepPurpose catches that `ModuleNotFoundError` and
+re-raises it as "please install descriptastorus", which sends you after the wrong
+package: it is installed, its own dependency is not. `requirements.txt` and
+`pyproject.toml` both request `six` explicitly.
+
 **`--no-deps` is deliberate.** DeepPurpose's declared requirements pull `ax-platform`
 (→ botorch, gpytorch) and `dgllife`, neither of which this code path uses. Skipping them
 takes the environment from ~244 packages to ~82.

@@ -38,6 +38,7 @@ dependencies = [
     "wget>=3.2",            # DeepPurpose.dataset imports this at module level
     "subword-nmt>=0.3.8",
     "pandas-flavor>=0.3",
+    "six>=1.16",            # undeclared module-level import of descriptastorus/raw.py
 ]
 
 [project.optional-dependencies]

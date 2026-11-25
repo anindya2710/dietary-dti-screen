@@ -35,3 +35,11 @@ subword-nmt>=0.3.8
 pandas-flavor>=0.3
 
 descriptastorus @ git+https://github.com/bp-kelley/descriptastorus
+
+# six is a module-level import of descriptastorus/raw.py, and descriptastorus does not
+# declare it (it declares only pandas_flavor, rdkit, scipy and numpy). It used to arrive
+# anyway through pandas -> python-dateutil -> six, until python-dateutil dropped six
+# after 2.9. Without this line, `from DeepPurpose import DTI` fails with a
+# ModuleNotFoundError for six, which DeepPurpose then re-raises as a misleading
+# "please install descriptastorus" message.
+six>=1.16
