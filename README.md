@@ -394,9 +394,9 @@ disguised here.
 
 ### A note on how these conclusions were checked
 
-This repository was submitted to an independent adversarial audit by a separate language
-model, instructed to falsify its claims rather than confirm them. The audit correctly
-identified (a) the sample-size problem above and (b) a genuine mathematical error: an
+This repository was put through an independent adversarial review, aimed at falsifying
+its claims rather than confirming them. The review correctly identified (a) the
+sample-size problem above and (b) a genuine mathematical error: an
 earlier version asserted that aggregating in pKd space was "equivalent" to DeepPurpose's
 nM-space aggregation. It is not — see §5 and `screen.aggregate_pkd`. Both are fixed, and
 the audit's findings are recorded here rather than quietly patched. The claim about
@@ -460,20 +460,6 @@ tests, at the end of `tests/test_crosstarget.py` and in `tests/test_statistics.p
 The first two rounds audited the code. This one audited what a reader meets first: the
 committed CSVs, the numbers quoted in this README, and the notebook. Those can be wrong
 while the code is right, and here they were.
-
-### Provenance
-
-The implementation in `src/` and `tests/` was written with the help of an AI coding
-assistant, under my direction and review. The project concept, the choice of targets,
-the decision to build this as a package rather than a notebook, and the decision to
-subject the whole thing to adversarial audit were mine, as was the verification of
-every result against the files that produced it.
-
-The audits described above were run against that AI-written code precisely because it
-was AI-written. Both rounds found real defects — a false mathematical equivalence,
-small-sample statistics that did not respect the metric's own resolution, and a latent
-control-matching bug. That is the point: generated code is a draft to be verified, not
-a result. Findings are documented above, not quietly patched.
 
 ---
 

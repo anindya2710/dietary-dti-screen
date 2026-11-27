@@ -183,9 +183,8 @@ class TestLoadAndRun:
 
 
 # ---------------------------------------------------------------------------------
-# Regression tests for the third audit round (2026-11-25). Each one fails against the
-# code as it stood before that round; see README, "A note on how these conclusions
-# were checked".
+# Column selection, aggregation and scope: the three places where a diagnostic can
+# silently report the wrong thing rather than fail.
 # ---------------------------------------------------------------------------------
 
 
